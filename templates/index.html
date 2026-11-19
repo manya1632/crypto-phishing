@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phishing Website Detector</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; }
+        .container { max-width: 700px; margin: 0 auto; padding: 40px 20px; }
+        h1 { text-align: center; font-size: 2rem; margin-bottom: 8px; color: #38bdf8; }
+        .subtitle { text-align: center; color: #94a3b8; margin-bottom: 32px; }
+        .input-group { display: flex; gap: 12px; margin-bottom: 24px; }
+        input[type="text"] {
+            flex: 1; padding: 14px 18px; border: 1px solid #334155; border-radius: 8px;
+            background: #1e293b; color: #e2e8f0; font-size: 1rem; outline: none;
+        }
+        input:focus { border-color: #38bdf8; }
+        button {
+            padding: 14px 28px; background: #2563eb; color: #fff; border: none;
+            border-radius: 8px; font-size: 1rem; cursor: pointer; font-weight: 600;
+        }
+        button:hover { background: #1d4ed8; }
+        button:disabled { background: #475569; cursor: wait; }
+        .result { background: #1e293b; border-radius: 12px; padding: 24px; display: none; }
+        .result.show { display: block; }
+        .verdict { font-size: 1.5rem; font-weight: 700; text-align: center; padding: 16px; border-radius: 8px; margin-bottom: 16px; }
+        .safe { background: #064e3b; color: #34d399; }
+        .danger { background: #7f1d1d; color: #f87171; }
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .detail-card { background: #0f172a; padding: 12px; border-radius: 8px; }
+        .detail-card .label { font-size: 0.8rem; color: #64748b; text-transform: uppercase; }
+        .detail-card .value { font-size: 1.1rem; margin-top: 4px; }
+        .error { color: #f87171; text-align: center; margin-top: 16px; }
+        .spinner { display: none; text-align: center; padding: 20px; color: #94a3b8; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Phishing Detector</h1>
+        <p class="subtitle">ML + Cryptographic verification for safe browsing</p>
+        <div class="input-group">
+            <input type="text" id="urlInput" placeholder="Enter a URL to analyze..." />
+            <button id="analyzeBtn" onclick="analyze()">Analyze</button>
+        </div>
+        <div class="spinner" id="spinner">Analyzing URL...</div>
+        <div class="result" id="result"></div>
+        <p class="error" id="error"></p>
+    </div>
+    <script>
+        async function analyze() {
+            const url = document.getElementById('urlInput').value.trim();
+            if (!url) return;
+            const btn = document.getElementById('analyzeBtn');
+            const spinner = document.getElementById('spinner');
+            const result = document.getElementById('result');
+            const error = document.getElementById('error');
+            btn.disabled = true; spinner.style.display = 'block';
+            result.className = 'result'; error.textContent = '';
+            try {
+                const resp = await fetch('/analyze', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url})
+                });
+                const data = await resp.json();
+                if (data.error) { error.textContent = data.error; return; }
+                const isPhishing = data.prediction === 'phishing';
+                const conf = data.confidence ? (data.confidence * 100).toFixed(1) + '%' : 'N/A';
+                result.innerHTML = `
+                    <div class="verdict ${isPhishing ? 'danger' : 'safe'}">
+                        ${isPhishing ? 'PHISHING DETECTED' : 'LIKELY SAFE'}
+                    </div>
+                    <div class="detail-grid">
+                        <div class="detail-card"><div class="label">Confidence</div><div class="value">${conf}</div></div>
+                        <div class="detail-card"><div class="label">SSL Valid</div><div class="value">${data.ssl?.has_ssl ? (data.ssl.cert_valid ? 'Yes' : 'No') : 'No SSL'}</div></div>
+                        <div class="detail-card"><div class="label">Cert Days Left</div><div class="value">${data.ssl?.cert_days_remaining ?? 'N/A'}</div></div>
+                        <div class="detail-card"><div class="label">Trusted Issuer</div><div class="value">${data.ssl?.issuer_trusted ? 'Yes' : 'No'}</div></div>
+                        <div class="detail-card"><div class="label">Self-Signed</div><div class="value">${data.ssl?.is_self_signed ? 'Yes' : 'No'}</div></div>
+                        <div class="detail-card"><div class="label">Chain Valid</div><div class="value">${data.chain?.chain_valid ? 'Yes' : 'No'}</div></div>
+                    </div>`;
+                result.className = 'result show';
+            } catch (e) { error.textContent = 'Failed to analyze URL.'; }
+            finally { btn.disabled = false; spinner.style.display = 'none'; }
+        }
+        document.getElementById('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
+    </script>
+</body>
+</html>
